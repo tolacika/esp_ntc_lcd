@@ -16,8 +16,8 @@ void lcd_update_task(void *pvParameter) {
 
     while (1)
     {
-        int channel_1_adc_raw = get_channel_1_data();
-        int channel_2_adc_raw = get_channel_2_data();
+        int channel_1_adc_raw = get_channel_data(0);
+        int channel_2_adc_raw = get_channel_data(1);
         float temp = adc_to_centigrade(channel_1_adc_raw);
         lcd_set_cursor(3, 1);
         snprintf(buffer, sizeof(buffer), "%.2f", temp);
