@@ -27,7 +27,6 @@ static esp_err_t i2c_send_byte_on_4bits(uint8_t data, uint8_t rs) {
     ESP_ERROR_CHECK(i2c_transmit_with_enable_toggle(nibbles[0]));
     ESP_ERROR_CHECK(i2c_transmit_with_enable_toggle(nibbles[1]));
     vTaskDelay(pdMS_TO_TICKS(1));
-    ESP_LOGI(TAG, "I2C device data sent: 0x%02X", data);
 
     return ESP_OK;
 }
@@ -101,7 +100,6 @@ void lcd_write_string(const char *str) {
         ESP_ERROR_CHECK(i2c_send_byte_on_4bits((uint8_t)(*str), LCD_RS_DATA));
         str++;
     }
-    ESP_LOGI(TAG, "I2C device string sent");
 }
 
 // Clear the LCD display
@@ -119,5 +117,4 @@ void lcd_backlight(bool state) {
         lcd_backlight_status &= ~LCD_BACKLIGHT;
     }
     ESP_ERROR_CHECK(i2c_master_transmit(i2c_device_handle, &lcd_backlight_status, 1, -1));
-    ESP_LOGI(TAG, "LCD backlight %s", state ? "on" : "off");
 }

@@ -7,33 +7,30 @@
 #include "lcd.h"
 
 void temperature_task(void *pvParameter) {
-    printf("Starting temperature task...\n");
-    char buffer[5]; // Buffer to hold the temperature string
+    adc_start_continuous();
+    adc_process_data();
+}
 
-    while (1) {
-        // Read temperature
-        printf("Reading temperature...\n");
-        int adc_raw = adc_read();
-        float temperature = adc_to_centigrade(adc_raw);
+void lcd_update_task(void *pvParameter) {
+    char buffer[5];
 
-        printf("T: %.2f °C\n", temperature);
-
-        // Update LCD
+    while (1)
+    {
+        int channel_1_adc_raw = get_channel_1_data();
+        int channel_2_adc_raw = get_channel_2_data();
+        float temp = adc_to_centigrade(channel_1_adc_raw);
         lcd_set_cursor(3, 1);
-        if (temperature < 0) {
-            lcd_write_string("-");
-            temperature = -temperature; // Make temperature positive for display
-        } else {
-            lcd_write_string(" ");
-        }
-
-        // Format temperature as a string
-        snprintf(buffer, sizeof(buffer), "%4.1f", temperature);
+        snprintf(buffer, sizeof(buffer), "%.2f", temp);
         lcd_write_string(buffer);
-        lcd_write_string("C");
-
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 1s delay (10Hz sampling)
+        lcd_write_string(" C");
+        lcd_set_cursor(3, 2);
+        temp = adc_to_centigrade(channel_2_adc_raw);
+        snprintf(buffer, sizeof(buffer), "%.2f", temp);
+        lcd_write_string(buffer);
+        lcd_write_string(" C");
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Update every second
     }
+    
 }
 
 void app_main() {
@@ -44,12 +41,16 @@ void app_main() {
     lcd_set_cursor(0, 0);
     lcd_write_string("Hello, ESP32!");
     lcd_set_cursor(0, 1);
-    lcd_write_string("T0: N/A C");
+    lcd_write_string("T1: N/A C");
+    lcd_set_cursor(0, 2);
+    lcd_write_string("T2: N/A C");
 
     adc_init(); // Initialize ADC
     vTaskDelay(pdMS_TO_TICKS(1000)); // Delay to allow ADC to stabilize
     printf("ADC initialized\n");
 
     // Create temperature reading task
-    xTaskCreate(temperature_task, "temperature_task", 2048, NULL, 5, NULL);
+    xTaskCreatePinnedToCore(temperature_task, "temperature_task", 4096, NULL, 5, NULL, 1);
+    // Create LCD update task
+    xTaskCreatePinnedToCore(lcd_update_task, "lcd_update_task", 4096, NULL, 5, NULL, 0);
 }
