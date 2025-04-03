@@ -94,10 +94,15 @@ void lcd_set_cursor(uint8_t col, uint8_t row) {
     ESP_ERROR_CHECK(i2c_send_byte_on_4bits(data, LCD_RS_CMD));
 }
 
+// Write a character to the LCD
+void lcd_write_char(char c) {
+    ESP_ERROR_CHECK(i2c_send_byte_on_4bits((uint8_t)c, LCD_RS_DATA));
+}
+
 // Write a string to the LCD
 void lcd_write_string(const char *str) {
     while (*str) {
-        ESP_ERROR_CHECK(i2c_send_byte_on_4bits((uint8_t)(*str), LCD_RS_DATA));
+        lcd_write_char(*str);
         str++;
     }
 }
