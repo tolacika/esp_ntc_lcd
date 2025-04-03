@@ -2,39 +2,20 @@
 
 static adc_continuous_handle_t adc_handle;
 static SemaphoreHandle_t channel_data_mutex;
-typedef struct {
-    int sum;
-    int count;
-} channel_data_t;
 
-static channel_data_t channel_data[6] = {
-    {0, 0}, // Channel 1
-    {0, 0}, // Channel 2
-    {0, 0}, // Channel 3
-    {0, 0}, // Channel 4
-    {0, 0}, // Channel 5
-    {0, 0}  // Channel 6
-};
+static int channel_data[6] = { 0, 0, 0, 0, 0, 0 };
 
 int get_channel_data(int channel_index) {
     if (channel_index < 0 || channel_index >= 6) {
-        return 0; // Invalid channel index
+        return -1;
     }
 
     if (xSemaphoreTake(channel_data_mutex, portMAX_DELAY)) {
-        int downsample = channel_data[channel_index].sum;
-        int downsample_count = channel_data[channel_index].count;
-        channel_data[channel_index].sum = 0;
-        channel_data[channel_index].count = 0;
+        int sample = channel_data[channel_index];
         xSemaphoreGive(channel_data_mutex);
-
-        if (downsample_count > 0) {
-            return downsample / downsample_count; // Return the average value
-        } else {
-            return 0; // Return 0 if no data is available
-        }
+        return sample;
     }
-    return 0; // Return 0 to indicate failure
+    return -1;
 }
 
 float adc_to_centigrade(int adc_raw) {
@@ -105,16 +86,6 @@ void adc_stop_continuous() {
 void adc_process_data() {
     uint8_t buffer[256];
     adc_digi_output_data_t *data;
-    channel_data_t channels[8] = {
-        {0, 0}, // ADC1_CH0
-        {0, 0}, // ADC1_CH1 - Unused
-        {0, 0}, // ADC1_CH2 - Unused
-        {0, 0}, // ADC1_CH3
-        {0, 0}, // ADC1_CH4
-        {0, 0}, // ADC1_CH5
-        {0, 0}, // ADC1_CH6
-        {0, 0}  // ADC1_CH7
-    };
 
     while (1) {
         uint32_t read_size = 0;
@@ -126,31 +97,19 @@ void adc_process_data() {
                 if (data->type1.channel >= 8) {
                     continue; // Skip invalid channels
                 }
-                channel_data_t *channel_data = &channels[data->type1.channel];
-                channel_data->sum += data->type1.data;
-                channel_data->count++;
-            }
-
-            for (int i = 0; i < 8; i++) {
-                if (channels[i].count > 0) {
-                    int avg = channels[i].sum / channels[i].count;
-                    channels[i].sum = 0;
-                    channels[i].count = 0;
-                    int index = 0;
-                    switch (i) {
-                        case ADC_USED_CHANNEL_1: index = 0; break;
-                        case ADC_USED_CHANNEL_2: index = 1; break;
-                        case ADC_USED_CHANNEL_3: index = 2; break;
-                        case ADC_USED_CHANNEL_4: index = 3; break;
-                        case ADC_USED_CHANNEL_5: index = 4; break;
-                        case ADC_USED_CHANNEL_6: index = 5; break;
-                        default: continue;
-                    }
-                    if (xSemaphoreTake(channel_data_mutex, portMAX_DELAY)) {
-                        channel_data[index].sum += avg;
-                        channel_data[index].count++;
-                        xSemaphoreGive(channel_data_mutex);
-                    }
+                int index = 0;
+                switch (data->type1.channel) {
+                    case ADC_USED_CHANNEL_1: index = 0; break;
+                    case ADC_USED_CHANNEL_2: index = 1; break;
+                    case ADC_USED_CHANNEL_3: index = 2; break;
+                    case ADC_USED_CHANNEL_4: index = 3; break;
+                    case ADC_USED_CHANNEL_5: index = 4; break;
+                    case ADC_USED_CHANNEL_6: index = 5; break;
+                    default: continue;
+                }
+                if (xSemaphoreTake(channel_data_mutex, portMAX_DELAY)) {
+                    channel_data[index] = data->type1.data;
+                    xSemaphoreGive(channel_data_mutex);
                 }
             }
         }
