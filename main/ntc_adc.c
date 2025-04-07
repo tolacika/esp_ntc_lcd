@@ -37,7 +37,7 @@ float ntc_adc_raw_to_temperature(int adc_raw) {
 }
 
 // Initialize the mutex for thread safety
-static void ntc_init_mutex() {
+void ntc_init_mutex() {
     channel_data_mutex = xSemaphoreCreateMutex();
     if (channel_data_mutex == NULL) {
         printf("Failed to create mutex\n");
@@ -47,6 +47,10 @@ static void ntc_init_mutex() {
 
 // Initialize the ADC
 esp_err_t ntc_adc_initialize() {
+    if (channel_data_mutex == NULL) {
+        ntc_init_mutex(); // Initialize mutex if not already done
+    }
+
     // ADC configuration
     adc_continuous_handle_cfg_t adc_config = {
         .max_store_buf_size = 1024,
@@ -74,8 +78,9 @@ esp_err_t ntc_adc_initialize() {
     channel_config.adc_pattern = patterns;
 
     ESP_ERROR_CHECK(adc_continuous_config(adc_handle, &channel_config));
-
-    ntc_init_mutex(); // Initialize thread safety
+    
+    // Create temperature reading task
+    xTaskCreatePinnedToCore(ntc_temperature_task, "temperature_task", 4096, NULL, 5, NULL, 1);
 
     return ESP_OK;
 }

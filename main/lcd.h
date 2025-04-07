@@ -6,6 +6,7 @@
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "events.h"
 
 // I2C configuration
 #define I2C_MASTER_NUM        I2C_NUM_0
@@ -36,6 +37,17 @@
 #define LCD_ROW_OFFSET {0x00, 0x40, 0x14, 0x54} // Row offsets for 20x4 LCD
 #define LCD_BUFFER_SIZE (LCD_COLS * LCD_ROWS)
 
+typedef enum {
+    LCD_SCREEN_SPLASH = 0,
+    LCD_SCREEN_AP_MODE,
+    LCD_SCREEN_TEMP_AND_AVG,
+    LCD_SCREEN_TEMP_AND_STATUS,
+    LCD_SCREEN_STATUS_1,
+    LCD_SCREEN_STATUS_2,
+    LCD_SCREEN_STATUS_3,
+    LCD_SCREEN_MAX
+} lcd_screen_state_t;
+
 /**
  * @brief Initialize the I2C master.
  */
@@ -45,6 +57,12 @@ void i2c_initialize(void);
  * @brief Initialize the LCD.
  */
 void lcd_initialize(void);
+
+/**
+ * @brief Handler for short button press events.
+ * @param event Pointer to the event structure.
+ */
+void lcd_short_press_handler(event_t *event);
 
 /**
  * @brief Set the cursor position on the LCD.
@@ -106,11 +124,29 @@ void lcd_toggle_backlight(bool state);
 void lcd_format_temperature(float temp, char *buffer, size_t buffer_size);
 
 /**
+ * @brief Render the LCD cycle.
+ * @param temps Array of temperature values.
+ * @param size Number of temperatures.
+ */
+void lcd_render_cycle(void);
+
+/**
  * @brief Display an array of temperatures on the LCD.
  * @param temps Array of temperature values.
  * @param size Number of temperatures.
  */
-void lcd_display_temperatures(float *temps, size_t size);
+void lcd_temperaure_screen(bool bottom_statistics);
+
+/**
+ * @brief Display a list of status messages on the LCD.
+ * @param temps Array of temperature values.
+ * @param size Number of temperatures.
+ */
+void lcd_status_screen(int8_t index);
+
+lcd_screen_state_t lcd_get_screen_state(void);
+void lcd_next_screen(void);
+void lcd_set_screen_state(lcd_screen_state_t state);
 
 /**
  * @brief Periodically update the LCD with temperature data.

@@ -29,6 +29,11 @@
 esp_err_t ntc_adc_initialize();
 
 /**
+ * @brief Initialize the mutex for thread safety.
+ */
+void ntc_init_mutex();
+
+/**
  * @brief Start the ADC in continuous mode.
  */
 void ntc_adc_start();

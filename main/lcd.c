@@ -3,13 +3,30 @@
 #include <string.h>
 
 static const char *TAG = "I2C_LCD";
+static const uint8_t COMMAND_8BIT_MODE = 0b00110000;
+static const uint8_t COMMAND_4BIT_MODE = 0b00100000;
+static const uint8_t INIT_COMMANDS[] = {
+    0b00101000, // Function set: 4-bit mode, 2 lines, 5x8 dots
+    0b00001100, // Display control: display on, cursor off, blink off
+    0b00000001, // Clear display
+    0b00000110, // Entry mode set: increment cursor, no shift
+    0b00000010, // Set cursor to home position
+    0b10000000  // Set cursor to first line
+};
+
 static i2c_master_dev_handle_t i2c_device_handle = NULL;
 static i2c_master_bus_handle_t i2c_bus_handle = NULL;
 static uint8_t lcd_backlight_status = LCD_BACKLIGHT;
 
 static char lcd_buffer[LCD_BUFFER_SIZE]; // 80-byte buffer for the LCD
+static const char LCD_SCREENS[2][LCD_BUFFER_SIZE] = {
+    "   Splash Screen    LCD Temperature test   Splash Screen       LCD Test         ",
+    "                     Access Point Mode                                          "
+};
 static uint8_t cursor_col = 0;
 static uint8_t cursor_row = 0;
+
+static lcd_screen_state_t lcd_screen_state = LCD_SCREEN_SPLASH;
 
 static esp_err_t i2c_send_with_toggle(uint8_t data) {
     // Helper function to toggle the enable bit
@@ -62,32 +79,61 @@ void i2c_initialize(void) {
 
 void lcd_initialize(void) {
     // Initialize the LCD
-    uint8_t init_8bit_commands[] = {
-        lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD,
-        0b00110000 | lcd_backlight_status | LCD_RW_WRITE | LCD_RS_CMD,
-        0b00110000 | lcd_backlight_status | LCD_RW_WRITE | LCD_RS_CMD,
-        0b00110000 | lcd_backlight_status | LCD_RW_WRITE | LCD_RS_CMD,
-        0b00100000 | lcd_backlight_status | LCD_RW_WRITE | LCD_RS_CMD,
-    };
+    ESP_ERROR_CHECK(i2c_send_with_toggle(lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+    ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_8BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+    ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_8BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+    ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_8BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
+    ESP_ERROR_CHECK(i2c_send_with_toggle(COMMAND_4BIT_MODE | lcd_backlight_status | LCD_ENABLE_OFF | LCD_RW_WRITE | LCD_RS_CMD));
 
-    uint8_t init_commands[] = {
-        0b00101000, // Function set: 4-bit mode, 2 lines, 5x8 dots
-        0b00001100, // Display control: display on, cursor off, blink off
-        0b00000001, // Clear display
-        0b00000110, // Entry mode set: increment cursor, no shift
-        0b00000010, // Set cursor to home position
-        0b10000000  // Set cursor to first line
-    };
-
-    for (uint8_t i = 0; i < sizeof(init_8bit_commands); i++) {
-        ESP_ERROR_CHECK(i2c_send_with_toggle(init_8bit_commands[i]));
-        vTaskDelay(pdMS_TO_TICKS(5));
+    for (uint8_t i = 0; i < sizeof(INIT_COMMANDS); i++) {
+        ESP_ERROR_CHECK(i2c_send_4bit_data(INIT_COMMANDS[i], LCD_RS_CMD));
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
+    
+    lcd_toggle_backlight(true);
+    lcd_clear_buffer();
+    lcd_render();
+    lcd_render_cycle(); 
 
-    for (uint8_t i = 0; i < sizeof(init_commands); i++) {
-        ESP_ERROR_CHECK(i2c_send_4bit_data(init_commands[i], LCD_RS_CMD));
-        vTaskDelay(pdMS_TO_TICKS(5));
+    events_subscribe(EVENT_BUTTON_SHORT_PRESS, lcd_short_press_handler);
+
+    
+
+    // Create LCD update task
+    xTaskCreatePinnedToCore(lcd_update_task, "lcd_update_task", 4096, NULL, 5, NULL, 0);
+}
+
+void lcd_short_press_handler(event_t *event) {
+    // Handle short button press event
+    lcd_next_screen(); // Cycle to the next screen
+}
+
+void lcd_set_screen_state(lcd_screen_state_t state) {
+    // Set the current screen state
+    if (state < LCD_SCREEN_MAX) {
+        lcd_screen_state = state;
+    } else {
+        lcd_screen_state = LCD_SCREEN_TEMP_AND_AVG; // Default to temperature and average screen
     }
+    lcd_clear_buffer(); // Clear the buffer for the new screen
+    lcd_render_cycle(); // Render the new screen
+}
+
+void lcd_next_screen(void) {
+    // Cycle through the screens
+    if (lcd_screen_state >= LCD_SCREEN_TEMP_AND_AVG) {
+        lcd_screen_state++;
+    }
+    if (lcd_screen_state >= LCD_SCREEN_MAX) {
+        lcd_screen_state = LCD_SCREEN_TEMP_AND_AVG; // Loop back to the first screen
+    }
+    lcd_clear_buffer(); // Clear the buffer for the new screen
+    lcd_render_cycle(); // Render the new screen
+}
+
+lcd_screen_state_t lcd_get_screen_state(void) {
+    // Get the current screen state
+    return lcd_screen_state;
 }
 
 void lcd_set_cursor_position(uint8_t col, uint8_t row) {
@@ -189,10 +235,50 @@ void lcd_format_temperature(float temp, char *buffer, size_t buffer_size) {
     buffer[4] = (int)(temp * 10) % 10 + '0';
 }
 
-void lcd_display_temperatures(float *temps, size_t size) {
-    if (size != 6) {
-        return; // Not enough space for 6 temperatures
+void lcd_render_cycle() {
+    switch (lcd_screen_state) {
+    case LCD_SCREEN_TEMP_AND_AVG:
+        lcd_temperaure_screen(true);
+        break;
+    case LCD_SCREEN_TEMP_AND_STATUS:
+        lcd_temperaure_screen(false);
+        break;
+    case LCD_SCREEN_STATUS_1:
+    case LCD_SCREEN_STATUS_2:
+    case LCD_SCREEN_STATUS_3:
+        lcd_status_screen(lcd_screen_state - LCD_SCREEN_STATUS_1);
+        break;
+    case LCD_SCREEN_SPLASH:
+    case LCD_SCREEN_AP_MODE:
+        lcd_copy_to_buffer(LCD_SCREENS[lcd_screen_state], LCD_BUFFER_SIZE, 0, 0);
+        break;
+    
+    default:
+        break;
     }
+    lcd_render(); // Render the current screen
+}
+
+void lcd_status_screen(int8_t index) {
+    lcd_clear_buffer();
+
+    lcd_set_cursor(0, 0);
+    lcd_write_text("   Status Screen   ");
+    lcd_write_character(index + '1');
+    lcd_set_cursor(0, 1);
+    lcd_write_text("WiFi: ");
+    
+    /*EventBits_t bits = xEventGroupGetBits(get_event_group());
+    if (bits & WIFI_CONNECTED_BIT) {
+        lcd_write_text("Connected");
+    } else {
+        lcd_write_text("Disconnected");
+    }*/
+}
+
+
+void lcd_temperaure_screen(bool bottom_statistics) {
+    // Display temperature data on the LCD
     lcd_clear_buffer();
 
     char bgBuffer[] = "T1:     C  T4:     C";
@@ -206,7 +292,7 @@ void lcd_display_temperatures(float *temps, size_t size) {
     bgBuffer[12] = '6';
     lcd_set_cursor(0, 2);
     lcd_copy_to_buffer(bgBuffer, strlen(bgBuffer), 0, 2);
-    char avgBuffer[] = "     C<     C<     C";
+    static const char avgBuffer[] = "     C<     C<     C";
     lcd_set_cursor(0, 3);
     lcd_copy_to_buffer(avgBuffer, strlen(avgBuffer), 0, 3);
 
@@ -215,19 +301,27 @@ void lcd_display_temperatures(float *temps, size_t size) {
     float max_temp = -20.0;
     float avg_temp = 0.0;
 
-    for (int i = 0; i < size; i++) {
-        if (temps[i] < min_temp) {
-            min_temp = temps[i];
+    for (int i = 0; i < 6; i++) {
+        float temp = ntc_adc_raw_to_temperature(ntc_get_channel_data(i));
+        if (bottom_statistics && temp < min_temp) {
+            min_temp = temp;
         }
-        if (temps[i] > max_temp) {
-            max_temp = temps[i];
+        if (bottom_statistics && temp > max_temp) {
+            max_temp = temp;
         }
-        avg_temp += temps[i];
+        if (bottom_statistics) {
+            avg_temp += temp;
+        }
         lcd_set_cursor(i < 3 ? 3 : 14, i % 3);
-        lcd_format_temperature(temps[i], buffer, sizeof(buffer));
+        lcd_format_temperature(temp, buffer, sizeof(buffer));
         lcd_write_text(buffer);
     }
-    avg_temp /= size;
+
+    if (!bottom_statistics) {
+        return; // No statistics to display
+    }
+
+    avg_temp /= 6.0;
     lcd_set_cursor(0, 3);
     lcd_format_temperature(min_temp, buffer, sizeof(buffer));
     lcd_write_text(buffer);
@@ -239,19 +333,13 @@ void lcd_display_temperatures(float *temps, size_t size) {
     lcd_set_cursor(14, 3);
     lcd_format_temperature(max_temp, buffer, sizeof(buffer));
     lcd_write_text(buffer);
-
-    lcd_render(); // Draw the buffer to the LCD
 }
 
 void lcd_update_task(void *pvParameter) {
-    // Periodically update the LCD with temperature data
-    float temps[6];
+    // Periodically update the LCD 
     while (1)
     {
-        for (int i = 0; i < 6; i++) {
-            temps[i] = ntc_adc_raw_to_temperature(ntc_get_channel_data(i));
-        }
-        lcd_display_temperatures(temps, 6);
+        lcd_render_cycle();
         vTaskDelay(pdMS_TO_TICKS(500)); // Update every second
     }
 }
