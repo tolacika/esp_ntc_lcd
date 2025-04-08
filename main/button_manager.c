@@ -35,7 +35,7 @@ static void long_press_timer_callback(TimerHandle_t xTimer) {
 
         // status_led_set(LED_THREE_BLINK);
         // Handle long press action here
-        events_post(EVENT_BUTTON_LONG_PRESS, NULL);  // Post long press event
+        events_post(EVENT_BUTTON_LONG_PRESS, NULL, 0);  // Post long press event
     }
 }
 
@@ -59,15 +59,10 @@ static void button_task(void *arg) {
                 if (!long_press_detected) {  // If long press wasn't already detected
                     if (press_duration >= BUTTON_LONG_PRESS_TIME_US) {  // Long press
                         ESP_LOGD(TAG, "Long press detected on GPIO %ld", io_num);
-                        events_post(EVENT_BUTTON_LONG_PRESS, NULL);  // Post long press event
-
-                        //status_led_set(LED_THREE_BLINK);
+                        events_post(EVENT_BUTTON_LONG_PRESS, NULL, 0);  // Post long press event
                     } else if (press_duration >= BUTTON_DEBOUNCE_TIME_US) {  // Short press
                         ESP_LOGD(TAG, "Short press detected on GPIO %ld", io_num);
-                        events_post(EVENT_BUTTON_SHORT_PRESS, NULL);  // Post short press event
-                        
-                        //led_state_t current_state = status_led_get();
-                        //status_led_set(current_state == LED_SLOW_BLINK ? LED_FAST_BLINK : LED_SLOW_BLINK);
+                        events_post(EVENT_BUTTON_SHORT_PRESS, NULL, 0);  // Post short press event
                     }
                 }
             }

@@ -40,118 +40,78 @@
 typedef enum {
     LCD_SCREEN_SPLASH = 0,
     LCD_SCREEN_AP_MODE,
-    LCD_SCREEN_TEMP_AND_AVG,
     LCD_SCREEN_TEMP_AND_STATUS,
+    LCD_SCREEN_TEMP_AND_AVG,
     LCD_SCREEN_STATUS_1,
     LCD_SCREEN_STATUS_2,
     LCD_SCREEN_STATUS_3,
     LCD_SCREEN_MAX
 } lcd_screen_state_t;
 
-/**
- * @brief Initialize the I2C master.
- */
+// Initialize the I2C master.
 void i2c_initialize(void);
 
-/**
- * @brief Initialize the LCD.
- */
+// Initialize the LCD.
 void lcd_initialize(void);
 
-/**
- * @brief Handler for short button press events.
- * @param event Pointer to the event structure.
- */
-void lcd_short_press_handler(event_t *event);
-
-/**
- * @brief Set the cursor position on the LCD.
- * @param col Column index (0-based).
- * @param row Row index (0-based).
- */
+// Set the cursor position on the LCD.
 void lcd_set_cursor_position(uint8_t col, uint8_t row);
 
-/**
- * @brief Update the cursor position in the buffer.
- * @param col Column index (0-based).
- * @param row Row index (0-based).
- */
+// Update the cursor position in the buffer.
 void lcd_set_cursor(uint8_t col, uint8_t row);
 
-/**
- * @brief Write a single character to the buffer.
- * @param c Character to write.
- */
+// Write a single character to the buffer.
 void lcd_write_character(char c);
 
-/**
- * @brief Write a string to the buffer.
- * @param str Null-terminated string to write.
- */
+// Write a string to the buffer.
 void lcd_write_text(const char *str);
 
-/**
- * @brief Copy data to the LCD buffer at a specific position.
- * @param data Data to copy.
- * @param size Size of the data.
- * @param col Column index (0-based).
- * @param row Row index (0-based).
- */
+// Write a buffer to the LCD.
+void lcd_write_buffer(const char *buffer, size_t size);
+
+// Copy data to the LCD buffer at a specific position.
 void lcd_copy_to_buffer(const char *data, size_t size, int8_t col, int8_t row);
 
-/**
- * @brief Clear the LCD buffer.
- */
+// Clear the LCD buffer.
 void lcd_clear_buffer(void);
 
-/**
- * @brief Render the buffer content to the LCD.
- */
+// Render the buffer content to the LCD.
 void lcd_render(void);
 
-/**
- * @brief Control the LCD backlight.
- * @param state True to turn on, false to turn off.
- */
+// Control the LCD backlight.
 void lcd_toggle_backlight(bool state);
 
-/**
- * @brief Format temperature as a string.
- * @param temp Temperature value.
- * @param buffer Buffer to store the formatted string.
- * @param buffer_size Size of the buffer.
- */
+// Format temperature as a string.
 void lcd_format_temperature(float temp, char *buffer, size_t buffer_size);
 
-/**
- * @brief Render the LCD cycle.
- * @param temps Array of temperature values.
- * @param size Number of temperatures.
- */
+// Render the LCD cycle.
 void lcd_render_cycle(void);
 
-/**
- * @brief Display an array of temperatures on the LCD.
- * @param temps Array of temperature values.
- * @param size Number of temperatures.
- */
+// Display an array of temperatures on the LCD.
 void lcd_temperaure_screen(bool bottom_statistics);
 
-/**
- * @brief Display a list of status messages on the LCD.
- * @param temps Array of temperature values.
- * @param size Number of temperatures.
- */
+// Display the status line on the LCD.
+void lcd_status_line(void);
+
+// Display a list of status messages on the LCD.
 void lcd_status_screen(int8_t index);
 
+// Display the splash screen on the LCD.
+void lcd_splash_screen(void);
+
+// Display the access point mode screen on the LCD.
+void lcd_ap_mode_screen(void);
+
+// Get the current screen state.
 lcd_screen_state_t lcd_get_screen_state(void);
+
+// Go to the next screen.
 void lcd_next_screen(void);
+
+// Set the current screen state.
 void lcd_set_screen_state(lcd_screen_state_t state);
 
-/**
- * @brief Periodically update the LCD with temperature data.
- * @param pvParameter Task parameter (unused).
- */
+// Periodically update the LCD with temperature data.
 void lcd_update_task(void *pvParameter);
 
 #endif // LCD_H

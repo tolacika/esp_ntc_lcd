@@ -19,6 +19,6 @@ typedef enum {
 void status_led_task(void *pvParameter);
 void status_led_init(void);
 void status_led_set(led_state_t led_state);
-void status_led_event_handler(event_t *event);
+void status_led_event_handler(void* handler_arg, esp_event_base_t base, int32_t id, void* event_data);
 
 #endif // STATUS_LED_H

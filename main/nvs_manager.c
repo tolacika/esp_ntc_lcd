@@ -146,7 +146,4 @@ void read_running_config()
   {
     running_config.ap_channel = 1; // Default channel
   }
-
-  ESP_LOGI(TAG, "Stored running config:\n\tAP SSID:\t\"%s\",\n\tAP Pass:\t\"%s\",\n\tSTA SSID:\t\"%s\",\n\tSTA Pass:\t\"%s\",\n\tAP Channel:\t%ld",
-           running_config.ap_ssid, running_config.ap_pass, running_config.sta_ssid, running_config.sta_pass, running_config.ap_channel);
 }

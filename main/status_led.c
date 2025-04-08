@@ -20,10 +20,10 @@ void status_led_init(void) {
     // Create the task
     xTaskCreate(status_led_task, "status_led_task", 2048, NULL, 5, NULL);
     // Subscribe to events
-    events_subscribe(EVENT_WIFI_CONNECTED, status_led_event_handler);
-    events_subscribe(EVENT_WIFI_DISCONNECTED, status_led_event_handler);
-    events_subscribe(EVENT_BUTTON_SHORT_PRESS, status_led_event_handler);
-    events_subscribe(EVENT_BUTTON_LONG_PRESS, status_led_event_handler);
+    events_subscribe(EVENT_WIFI_CONNECTED, status_led_event_handler, NULL);
+    events_subscribe(EVENT_WIFI_DISCONNECTED, status_led_event_handler, NULL);
+    events_subscribe(EVENT_BUTTON_SHORT_PRESS, status_led_event_handler, NULL);
+    events_subscribe(EVENT_BUTTON_LONG_PRESS, status_led_event_handler, NULL);
 
 }
 
@@ -42,8 +42,8 @@ void status_led_task(void *pvParameter) {
     }
 }
 
-void status_led_event_handler(event_t *event) {
-    switch (event->type) {
+void status_led_event_handler(void* handler_arg, esp_event_base_t base, int32_t id, void* event_data) {
+    switch (id) {
         case EVENT_WIFI_CONNECTED:
             status_led_set(LED_OK); // Set to OK state on WiFi connected
             break;

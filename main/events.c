@@ -2,112 +2,67 @@
 #include "esp_log.h"
 
 static const char *TAG = "events";
+static esp_event_loop_handle_t custom_event_loop = NULL; // Custom event loop handle
 
-static EventGroupHandle_t event_group;
-static QueueHandle_t event_queue;
+ESP_EVENT_DEFINE_BASE(CUSTOM_EVENTS); // Define the event base for custom events
 
-static event_subscription_t *subs_head = NULL;
-static event_subscription_t *subs_tail = NULL;
+static void application_task(void* args)
+{
+    // Wait to be started by the main task
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-#define EVENT_QUEUE_SIZE 10
-
-// Task to process events
-static void event_task(void *pvParameter) {
-    event_t event;
-    while (1) {
-        if (xQueueReceive(event_queue, &event, portMAX_DELAY)) {
-            // Call type-specific callbacks
-            event_subscription_t *current = subs_head;
-            while (current != NULL) {
-                if (current->type == event.type) {
-                    current->callback(&event);
-                }
-                current = current->next;
-            }
-
-            switch (event.type) {
-                case EVENT_WIFI_CONNECTED:
-                    ESP_LOGI(TAG, "WiFi connected");
-                    xEventGroupSetBits(event_group, WIFI_CONNECTED_BIT);
-                    break;
-
-                case EVENT_WIFI_DISCONNECTED:
-                    ESP_LOGI(TAG, "WiFi disconnected");
-                    xEventGroupClearBits(event_group, WIFI_CONNECTED_BIT);
-                    break;
-
-                case EVENT_BUTTON_LONG_PRESS:
-                    ESP_LOGI(TAG, "Long button press detected");
-                    break;
-
-                case EVENT_BUTTON_SHORT_PRESS:
-                    ESP_LOGI(TAG, "Short button press detected");
-                    break;
-
-                default:
-                    ESP_LOGW(TAG, "Unknown event type: %d", event.type);
-                    break;
-            }
-        }
+    while(1) {
+        esp_event_loop_run(custom_event_loop, 100);
+        vTaskDelay(10);
     }
 }
 
 // Initialize the event system
 void events_init(void) {
-    event_group = xEventGroupCreate();
-    event_queue = xQueueCreate(EVENT_QUEUE_SIZE, sizeof(event_t));
-    xTaskCreate(event_task, "event_task", 4096, NULL, 5, NULL);
+    esp_event_loop_args_t loop_args = {
+        .queue_size = 10, // Adjust the queue size as needed
+        .task_name = "custom_evt_loop", // Name of the event loop task
+        .task_stack_size = 3072, // Stack size for the event loop task
+        .task_priority = uxTaskPriorityGet(NULL), // Priority for the event loop task
+        .task_core_id = tskNO_AFFINITY // Core to run the event loop task
+    };
+
+    esp_err_t err = esp_event_loop_create(&loop_args, &custom_event_loop);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create custom event loop: %s", esp_err_to_name(err));
+    }
+
+    // Create the application task
+    TaskHandle_t task_handle;
+    ESP_LOGI(TAG, "starting application task");
+    xTaskCreate(application_task, "application_task", 3072, NULL, uxTaskPriorityGet(NULL) + 1, &task_handle);
+
+    // Start the application task to run the event handlers
+    xTaskNotifyGive(task_handle);
 }
 
 // Post an event to the queue
-void events_post(event_type_t type, void *data) {
-    event_t event = {
-        .type = type,
-        .data = data
-    };
-    xQueueSend(event_queue, &event, portMAX_DELAY);
-}
-
-
-void events_subscribe(event_type_t type, void (*callback)(event_t *event)) {
-    event_subscription_t *new_sub = (event_subscription_t *)malloc(sizeof(event_subscription_t));
-    if (new_sub == NULL) {
-        ESP_LOGE(TAG, "Failed to allocate memory for event subscription");
+void events_post(int32_t event_id, const void* event_data, size_t event_data_size) {
+    if (custom_event_loop == NULL) {
+        ESP_LOGE(TAG, "Custom event loop not initialized");
         return;
     }
-    new_sub->type = type;
-    new_sub->callback = callback;
-    new_sub->next = NULL;
 
-    if (subs_head == NULL) {
-        subs_head = new_sub;
-        subs_tail = new_sub;
-    } else {
-        subs_tail->next = new_sub;
-        subs_tail = new_sub;
+    esp_err_t err = esp_event_post_to(custom_event_loop, CUSTOM_EVENTS, event_id, event_data, event_data_size, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to post event: %s", esp_err_to_name(err));
     }
 }
 
-void events_unsubscribe(event_type_t type, void (*callback)(event_t *event)) {
-    event_subscription_t *current = subs_head;
-    event_subscription_t *previous = NULL;
-
-    while (current != NULL) {
-        if (current->type == type && current->callback == callback) {
-            if (previous == NULL) {
-                subs_head = current->next;
-            } else {
-                previous->next = current->next;
-            }
-            free(current);
-            break;
-        }
-        previous = current;
-        current = current->next;
+void events_subscribe(int32_t event_id, esp_event_handler_t event_handler, void* event_handler_arg) {
+    if (custom_event_loop == NULL) {
+        ESP_LOGE(TAG, "Custom event loop not initialized");
+        return;
     }
-}
 
-// Get the event group handle
-EventGroupHandle_t get_event_group(void) {
-    return event_group;
+    esp_err_t err = esp_event_handler_instance_register_with(custom_event_loop, CUSTOM_EVENTS, event_id,
+        event_handler, event_handler_arg, NULL);
+    if (err != ESP_OK) {    
+        ESP_LOGE(TAG, "Failed to subscribe to event: %s", esp_err_to_name(err));
+    }
 }
