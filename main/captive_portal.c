@@ -42,6 +42,12 @@ static void dns_server_task(void *arg) {
             continue;
         }
 
+        // Check if the received packet is a valid DNS query
+        if (len < 12) { // Minimum DNS query size
+            ESP_LOGW(DNS_TAG, "Invalid DNS query received");
+            continue;
+        }
+
         // Respond to the DNS query
         buffer[2] |= 0x80; // Set response flag
         buffer[3] |= 0x80; // Set authoritative answer flag
@@ -68,23 +74,7 @@ static void dns_server_task(void *arg) {
 }
 
 void cp_start_dns_server(void) {
-    // Set IP address for the access point
-    tcpip_adapter_ip_info_t ip_info;
-    IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
-    IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
-    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
-    tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &ip_info);
-
-    // Initialize DNS server
-    esp_dns_server_config_t config = DNS_SERVER_CONFIG_DEFAULT();
-    config.default_ip = ip_info.ip;
-    config.server_ip = ip_info.ip;
-
-    // Set up DNS server with the callback function
-    if (esp_dns_server_start(&config, dns_server_cb) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start DNS server");
-        return;
-    }
+    xTaskCreate(dns_server_task, "dns_server_task", 4096, NULL, 5, NULL);
 }
 
 static esp_err_t handle_root_get(httpd_req_t *req) {
@@ -107,6 +97,21 @@ static esp_err_t handle_configure_post(httpd_req_t *req) {
     return httpd_resp_send(req, "Configuration received", HTTPD_RESP_USE_STRLEN);
 }
 
+static esp_err_t handle_captive_check(httpd_req_t *req) {
+    // Respond with a minimal HTML page
+    const char *response = "<html><head><title>Captive Portal</title></head><body>Redirecting...</body></html>";
+    httpd_resp_set_type(req, "text/html");
+    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+static esp_err_t handle_redirect(httpd_req_t *req) {
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/");
+    httpd_resp_send(req, NULL, 0); // No body for redirect
+    return ESP_OK;
+}
+
 void cp_start_http_server(void) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     httpd_start(&http_server, &config);
@@ -124,6 +129,29 @@ void cp_start_http_server(void) {
         .handler = handle_configure_post,
     };
     httpd_register_uri_handler(http_server, &configure_uri);
+
+    // Handle captive portal detection URIs
+    httpd_uri_t captive_check_uri = {
+        .uri = "/generate_204", // Android captive portal check
+        .method = HTTP_GET,
+        .handler = handle_captive_check,
+    };
+    httpd_register_uri_handler(http_server, &captive_check_uri);
+
+    httpd_uri_t apple_captive_check_uri = {
+        .uri = "/hotspot-detect.html", // iOS captive portal check
+        .method = HTTP_GET,
+        .handler = handle_captive_check,
+    };
+    httpd_register_uri_handler(http_server, &apple_captive_check_uri);
+
+    // Handle wildcard URI for redirection
+    httpd_uri_t wildcard_uri = {
+        .uri = "/*",
+        .method = HTTP_GET,
+        .handler = handle_redirect,
+    };
+    httpd_register_uri_handler(http_server, &wildcard_uri);
 }
 void cp_stop_http_server(void) {
     if (http_server) {

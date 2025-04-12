@@ -87,8 +87,15 @@ void wifi_sta_init(void) {
 void enable_ap_mode(void) {
     running_config_t *config = get_running_config();
 
-    esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
-    esp_netif_dhcps_start(ap_netif);
+    esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap(); // Set IP address for the access point
+    esp_netif_ip_info_t ip_info;
+    IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
+    IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
+    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+    ESP_ERROR_CHECK(esp_netif_dhcps_stop(ap_netif)); // Stop DHCP server before setting IP
+    ESP_ERROR_CHECK(esp_netif_set_ip_info(ap_netif, &ip_info));
+    ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif)); // Restart DHCP server
+
 
     // Configure WiFi AP settings
     wifi_config_t wifi_config = {
